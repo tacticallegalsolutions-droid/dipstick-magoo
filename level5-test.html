@@ -237,10 +237,11 @@ const held=(...codes)=>codes.some(code=>keys.has(code)||[...touchKeys.values()].
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const LEVEL_INTRO_FRAMES=4*60;
 let introFrames=0;
+let townRetry=false;
 let mode="title", p, enemies, items, shots, sparks, boss, arena, camera, tick, score, speech, clear, buffer;
 function reset(){
   ARENA=[RECORD_ARENA,BREWERY_ARENA,POOL_ARENA,RIVER_ARENA,TOWN_ARENA][level-1];END=ARENA+W;
-  stands=[recordStands,breweryStands,poolStands,[],[]][level-1];
+  stands=[recordStands,breweryStands,poolStands,[],townVehicles.map(v=>[v.x,v.y,v.w])][level-1];
   p={x:55,y:FLOOR,vy:0,dir:1,power:100,powerDisc:checkpointDisc,boost:0,invincible:0,ifr:0,stun:0,cool:0,grace:5,walk:false};
   enemies=[294,403,600,805,952,1165,1320,1480,1570,1800,1940].map((x,i)=>({
     x,y:FLOOR,dir:-1,hp:i%3===1?4:3,cool:30+i*13,flash:0,style:i%3
@@ -282,10 +283,10 @@ function reset(){
     });
   }
   if(level===4)enemies=makeRiverEnemies();
-  if(level===5)enemies=townEnemies();
+  if(level===5){enemies=townEnemies();if(townRetry){p.x=Math.floor(TOWN_ARENA/2);enemies=enemies.filter(e=>Math.abs(e.x-p.x)>160);p.ifr=120;townRetry=false;}}
   items=[recordSupplies,brewerySupplies,poolSupplies,riverSupplies,townSupplies][level-1].map(([x,y,type])=>({x,y,type,taken:false}));
   boss={x:ARENA+295,y:FLOOR,vy:0,dir:-1,hp:bossHealth[level-1],flash:0,clock:0,chargeDir:-1,attack:""};
-  arena=false;camera=0;tick=0;score=checkpointScore;speech=0;clear=0;buffer=0;shots=[];sparks=[];clearInputs();
+  arena=false;camera=level===5?clamp(Math.round(p.x-112),0,ARENA):0;tick=0;score=checkpointScore;speech=0;clear=0;buffer=0;shots=[];sparks=[];clearInputs();
 }
 let audio,output,muted=false,noteTime=0,beat=0;
 function ready(){
@@ -445,7 +446,7 @@ function hurt(amount,source){
     p.stun=31;speech=96;
     tone(108,.13,.067,"sawtooth",42,.065);
   }
-  if(!p.power){mode="lost";overlay("GAME OVER",stageName(),"Score "+score+". Anna Lee is still waiting.","Try again");}
+  if(!p.power){if(level===5&&arena)townRetry=true;mode="lost";overlay("GAME OVER",stageName(),"Score "+score+". Anna Lee is still waiting.","Try again");}
 }
 function toss(e,type,vy,speed,offset=0){
   shots.push({x:e.x+e.dir*10,y:e.y-(type==="bottle"?20:28)+offset,vx:e.dir*speed,vy,type,life:150});
@@ -1589,6 +1590,7 @@ function drawTitle(){
   box(-4,-4,12,2,"#fff3c9");
   g.restore();
 }
+const townVehicles=Array.from({length:Math.floor((TOWN_ARENA-600)/370)},(_,i)=>({x:210+i*370+(i%3)*33,y:i%3===0?137:153,w:i%3===0?78:66,truck:i%3===0,color:["#9b4139","#416b83","#d2c6a4","#45534b","#795b43"][i%5]}));
 const townSupplies=Array.from({length:Math.floor(TOWN_ARENA/650)},(_,i)=>[350+i*650,FLOOR,["beet","brew","carrot","beet","bag","carrot","tequila"][i%7]]);
 function townPiers(){return [[ARENA,184,54],[ARENA+76,163,65],[ARENA+166,143,65],[ARENA+257,163,65],[ARENA+342,184,42]];}
 function townEnemies(){
@@ -1643,6 +1645,29 @@ function drawChris(){
  g.restore();
  if(boss.attack)text("FIRE IN THE HOLE!",clamp(boss.x-camera,70,W-70),42,"#ffe27a",8,"center");
 }
+function parkSign(label,x,y,w=166){
+ box(x+10,y+12,6,35,"#63442e");box(x+w-16,y+12,6,35,"#63442e");
+ poly([[x,y+5],[x+8,y],[x+w-8,y],[x+w,y+5],[x+w,y+23],[x+w-8,y+28],[x+8,y+28],[x,y+23]],"#4b3526");
+ box(x+5,y+5,w-10,18,"#805a38");box(x+7,y+6,w-14,1,"#b58c56");box(x+7,y+21,w-14,1,"#b58c56");
+ box(x+5,y+12,2,2,"#d3b77b");box(x+w-7,y+12,2,2,"#d3b77b");
+ text(label,x+w/2,y+10,"#fff0bc",label.length>26?6:8,"center");
+}
+function drawTownVehicle(v){
+ let x=v.x-camera,y=v.y,w=v.w;
+ if(x+w<0||x>W)return;
+ let base=v.truck?173:177;
+ box(x+3,y+15,w-6,base-y-12,v.color);
+ box(x+9,y,w-29,17,v.color);box(x+13,y+3,w-38,10,"#8caeb9");box(x+29,y+2,3,13,"#283b42");
+ if(v.truck){box(x+w-23,y+10,20,5,"#403c35");box(x+5,base-5,w-10,5,"#343638");}
+ box(x+2,base-5,7,4,"#e6d3a0");box(x+w-7,base-5,5,4,"#b94d3d");
+ for(const a of [x+12,x+w-25]){let t=v.truck?16:12;box(a,184-t,t,t,"#24262b");box(a+3,187-t,t-6,t-6,"#92938a");}
+ box(x+4,y+16,w-8,2,"#d0c2a5");
+}
+function drawBallFields(){
+ box(0,112,W,54,"#699451");
+ for(let i=-1;i<3;i++){let x=i*220-(camera*.5%220);poly([[x+10,155],[x+100,112],[x+190,155],[x+100,166]],"#b78b60");poly([[x+45,153],[x+100,125],[x+155,153],[x+100,163]],"#739d53");for(const [a,b] of [[100,125],[45,153],[155,153],[100,163]])box(x+a-2,b-2,5,3,"#f4edce");box(x+96,145,8,3,"#bd9469");for(let j=0;j<12;j++){box(x+j*17,105,1,23,"#a6b3a1");}box(x,105,200,2,"#c1c9b4");box(x,117,200,1,"#a6b3a1");box(x+12,132,34,4,"#b9bdb3");box(x+12,139,34,3,"#b9bdb3");}
+ parkSign("MARATHON TWP. LITTLE LEAGUE COMPLEX",78,70,228);
+}
 function drawTown(){
  box(0,0,W,H,"#91b9c7");
  for(let i=-1;i<14;i++){let x=i*36-(camera*.22%36);let h=30+((i+20)%4)*9;poly([[x,124],[x+19,124-h],[x+38,124]],"#315e46");}
@@ -1654,16 +1679,19 @@ function drawTown(){
  for(let x=0;x<W;x+=16)box(x,65,4,12,"#c5c7bd");
  for(const x of [104,252]){box(x,89,8,80,"#555e62");box(x+17,89,8,80,"#555e62");box(x-7,105,39,9,"#b0b3ac");}
  for(const [x,y,w] of townPiers()){box(x-camera,y,w,8,"#c0bfb0");box(x-camera+w/2-5,y+8,10,216-y,"#68777b");}
- text("NORWAY LAKE ROAD",192,49,"#172f39",10,"center");return;
+ parkSign("NORWAY LAKE ROAD",116,39,152);return;
  }
  const zone=Math.min(3,Math.floor(camera/(TOWN_ARENA/4)));
- const labels=[["WALKER'S PARTY STORE","OLD IGA","COLUMBIAVILLE"],["LAKEVILLE ELEMENTARY","WHERE FALCONS GET THEIR START","SOUTHERN LINKS TRAILWAY"],["HOLLOWAY RESERVOIR","COLUMBIAVILLE DEPOT","FLINT RIVER"],["NORWAY LAKE ROAD","MICHIGAN WOODLANDS","FLINT RIVER"]];
+ const labels=[["WALKER'S PARTY STORE","OLD IGA","COLUMBIAVILLE"],["LAKEVILLE ELEMENTARY","WHERE FALCONS GET THEIR START","SOUTHERN LINKS TRAILWAY"],["HOLLOWAY RESERVOIR","COLUMBIAVILLE DEPOT","FLINT RIVER"],["NORWAY LAKE ROAD","LAPEER STATE GAME AREA","FLINT RIVER"]];
  if(zone===2){box(0,124,W,39,"#377d99");for(let i=0;i<16;i++)box((i*43-camera*.2)%W,130+i%4*7,17,2,"#a2c7cc");}
- for(let i=-1;i<3;i++){let world=Math.floor(camera/192)+i,x=world*192-camera+8;let label=labels[zone][((world%3)+3)%3];
- if(zone===3){box(x+25,108,8,57,"#72513b");poly([[x,125],[x+29,66],[x+58,125]],"#244d37");box(x+68,145,115,17,"#d3c7a2");text(label,x+125,150,"#283c36",7,"center");}
- else{let color=zone===1?"#ad7962":zone===2?"#9b765c":"#b69b77";box(x,100,176,65,color);box(x-3,94,182,8,"#514b46");for(let j=0;j<4;j++){box(x+10+j*42,124,25,25,"#394f5c");box(x+12+j*42,126,21,3,"#91b9c7");}box(x+4,105,168,15,"#e7d8b4");text(label,x+88,109,"#352c29",label.length>24?6:8,"center");if(zone===1&&label==="LAKEVILLE ELEMENTARY")text("WHERE FALCONS GET THEIR START",x+88,153,"#fff2d2",6,"center");}
+ const ballZone=camera>=TOWN_ARENA*.36&&camera<TOWN_ARENA*.44;
+ if(ballZone)drawBallFields();
+ if(!ballZone)for(let i=-1;i<3;i++){let world=Math.floor(camera/192)+i,x=world*192-camera+8;let label=labels[zone][((world%3)+3)%3];
+ if(zone===3){box(x+25,108,8,57,"#72513b");poly([[x,125],[x+29,66],[x+58,125]],"#244d37");parkSign(label,x+58,116,132);}
+ else{let color=zone===1?"#ad7962":zone===2?"#9b765c":"#b69b77";box(x,100,176,65,color);box(x-3,94,182,8,"#514b46");for(let j=0;j<4;j++){box(x+10+j*42,124,25,25,"#394f5c");box(x+12+j*42,126,21,3,"#91b9c7");}if(zone===2)parkSign(label,x+5,91,166);else{box(x+4,105,168,15,"#493b32");box(x+6,107,164,1,"#d2b17a");text(label,x+88,109,"#fff0c5",label.length>24?6:8,"center");}if(zone===1&&label==="LAKEVILLE ELEMENTARY")text("WHERE FALCONS GET THEIR START",x+88,153,"#fff2d2",6,"center");}
  }
  box(0,166,W,18,"#8b8d83");box(0,184,W,32,"#4b5053");for(let x=-(camera%48);x<W;x+=48)box(x,199,24,2,"#d5bd66");
+ for(const v of townVehicles)drawTownVehicle(v);
 }
 function draw(){
   if(mode==="title"){drawTitle();return;}
